@@ -2,7 +2,7 @@
 // in the browser with an edge flood-fill, so products float on the page.
 (function () {
   const API = "https://en.wikipedia.org/api/rest_v1/page/summary/";
-  const CACHE_KEY = "apple-history-img-v1";
+  const CACHE_KEY = "apple-history-img-v2";
   const TARGET_W = 800;
   const MAX_CONCURRENT = 4;
 
@@ -38,20 +38,54 @@
     return (orig || thumb).source;
   }
 
-  async function resolveUrl(titles) {
-    const key = titles.join("|");
-    if (key in cache) return cache[key];
+  async function getJson(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status);
+    return res.json();
+  }
+
+  // Words that identify a product in a page or file title ("iPhone", "Quadra", "512K"...).
+  const STOP = new Set(["apple", "the", "and", "with", "generation", "inch"]);
+  function keywords(name) {
+    return name.toLowerCase().replace(/[()&,]/g, " ").split(/\s+/)
+      .filter((w) => w.length > 1 && !STOP.has(w) && !/^\d+(st|nd|rd|th)$/.test(w));
+  }
+  const relevant = (title, words) => !words.length || words.some((w) => title.toLowerCase().includes(w));
+  const isJunk = (title) => /logo|icon|wordmark|symbol|screenshot|map|chart/i.test(title);
+
+  // Yields candidate image URLs for a product, best source first.
+  async function* candidates(titles, name) {
+    const words = keywords(name);
+
+    // 1. The lead image of each listed Wikipedia article.
     for (const t of titles) {
       try {
-        const res = await fetch(API + encodeURIComponent(t.replace(/ /g, "_")), { headers: { accept: "application/json" } });
-        if (!res.ok) continue;
-        const data = await res.json();
-        const url = pickUrl(data);
-        if (url) { cache[key] = url; saveCache(); return url; }
-      } catch (e) { /* try next title */ }
+        const url = pickUrl(await getJson(API + encodeURIComponent(t.replace(/ /g, "_"))));
+        if (url && !isJunk(url)) yield url;
+      } catch (e) { /* try next */ }
     }
-    cache[key] = null; saveCache();
-    return null;
+
+    // 2. Search Wikipedia for the product and use matching articles' lead images.
+    try {
+      const q = encodeURIComponent(`${name} Apple`);
+      const data = await getJson(`https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch=${q}&gsrlimit=6&prop=pageimages&piprop=original|thumbnail&pithumbsize=${TARGET_W}`);
+      const pages = Object.values((data.query && data.query.pages) || {}).sort((x, y) => x.index - y.index);
+      for (const pg of pages) {
+        if (!relevant(pg.title, words)) continue;
+        const src = (pg.thumbnail && pg.thumbnail.source) || (pg.original && pg.original.source);
+        if (src && !isJunk(src)) yield src;
+      }
+    } catch (e) { /* fall through */ }
+
+    // 3. Search Wikimedia Commons photos directly, preferring PNGs (often already transparent).
+    try {
+      const q = encodeURIComponent(`${name.replace(/[()]/g, "")} Apple filetype:bitmap`);
+      const data = await getJson(`https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrsearch=${q}&gsrlimit=12&prop=imageinfo&iiprop=url&iiurlwidth=${TARGET_W}`);
+      const files = Object.values((data.query && data.query.pages) || {})
+        .filter((f) => f.imageinfo && relevant(f.title, words) && !isJunk(f.title))
+        .sort((x, y) => (/\.png$/i.test(y.title) - /\.png$/i.test(x.title)) || x.index - y.index);
+      for (const f of files) yield f.imageinfo[0].thumburl || f.imageinfo[0].url;
+    } catch (e) { /* nothing left */ }
   }
 
   function loadImg(src, cors) {
@@ -177,25 +211,41 @@
     canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL("image/png")), "image/png");
   });
 
-  // Public: returns { src, mode, source } where mode is "cutout" | "alpha" | "photo", or null.
+  async function prepare(url) {
+    try {
+      const img = await loadImg(url, true);
+      const out = removeBackground(img);
+      if (out) return { src: await toBlobUrl(out.canvas), mode: out.mode, source: url };
+      return { src: url, mode: "photo", source: url };
+    } catch (e) {
+      // CORS or canvas failure: show the plain image if it loads at all.
+      await loadImg(url, false);
+      return { src: url, mode: "photo", source: url };
+    }
+  }
+
+  // Public: resolves to { src, mode, source } where mode is "cutout" | "alpha" | "photo", or null.
   const memo = new Map();
   window.ProductImages = {
-    get(titles) {
-      const key = titles.join("|");
+    get(titles, name) {
+      const key = name + "|" + titles.join("|");
       if (!memo.has(key)) {
         memo.set(key, schedule(async () => {
-          const url = await resolveUrl(titles);
-          if (!url) return null;
-          try {
-            const img = await loadImg(url, true);
-            const out = removeBackground(img);
-            if (out) return { src: await toBlobUrl(out.canvas), mode: out.mode, source: url };
-            return { src: url, mode: "photo", source: url };
-          } catch (e) {
-            // CORS failed or decode failed — fall back to the plain image.
-            try { await loadImg(url, false); return { src: url, mode: "photo", source: url }; }
-            catch (e2) { return null; }
+          const tried = new Set();
+          if (cache[key]) {
+            tried.add(cache[key]);
+            try { return await prepare(cache[key]); } catch (e) { delete cache[key]; saveCache(); }
           }
+          for await (const url of candidates(titles, name)) {
+            if (tried.has(url)) continue;
+            tried.add(url);
+            try {
+              const res = await prepare(url);
+              cache[key] = url; saveCache();
+              return res;
+            } catch (e) { /* broken image, try the next candidate */ }
+          }
+          return null;
         }));
       }
       return memo.get(key);

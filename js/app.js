@@ -159,7 +159,7 @@
     if (el._imgRequested) return;
     el._imgRequested = true;
     const wrap = el.querySelector(".img-wrap");
-    window.ProductImages.get(el._p.wiki).then((res) => {
+    window.ProductImages.get(el._p.wiki, el._p.name).then((res) => {
       wrap.classList.remove("loading");
       if (!res) { wrap.classList.add("noimg"); return; }
       const img = new Image();
