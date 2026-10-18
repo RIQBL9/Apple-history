@@ -12,16 +12,16 @@ window.ERAS = [
 ];
 
 window.CATEGORIES = {
-  classic: { label: "Early & Classic", color: "#ff9f0a" },
-  mac:     { label: "Mac",            color: "#64d2ff" },
-  ipod:    { label: "iPod",           color: "#ff375f" },
-  iphone:  { label: "iPhone",         color: "#30d158" },
-  ipad:    { label: "iPad",           color: "#bf5af2" },
-  watch:   { label: "Watch",          color: "#ff453a" },
-  audio:   { label: "Audio",          color: "#5e5ce6" },
-  home:    { label: "Home & TV",      color: "#ffd60a" },
-  vision:  { label: "Vision",         color: "#66d4cf" },
-  acc:     { label: "Accessories",    color: "#ac8e68" }
+  classic: { label: "Early & Classic", color: "#b64400" },
+  mac:     { label: "Mac",            color: "#0071e3" },
+  ipod:    { label: "iPod",           color: "#d70015" },
+  iphone:  { label: "iPhone",         color: "#248a3d" },
+  ipad:    { label: "iPad",           color: "#8944ab" },
+  watch:   { label: "Watch",          color: "#c9346b" },
+  audio:   { label: "Audio",          color: "#3634a3" },
+  home:    { label: "Home & TV",      color: "#8a6d00" },
+  vision:  { label: "Vision",         color: "#0e7c86" },
+  acc:     { label: "Accessories",    color: "#7d5c3a" }
 };
 
 window.PRODUCTS = [

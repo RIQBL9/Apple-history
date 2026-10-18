@@ -59,7 +59,7 @@
           <p class="meta"><span class="chip">${cat.label}</span><time>${MONTHS[p.month - 1]} ${p.year}</time></p>
           <h3>${esc(p.name)}</h3>
           <ul>${p.facts.slice(0, 2).map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
-          <span class="more">${p.facts.length > 2 ? `+${p.facts.length - 2} more fact${p.facts.length > 3 ? "s" : ""}` : "Details"} →</span>
+          <span class="more">Learn more ›</span>
         </div>`;
       section.appendChild(el);
       itemEls.push(el);
